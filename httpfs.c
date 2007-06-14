@@ -22,6 +22,8 @@
 #include <curl/curl.h>
 #include <time.h>
 
+#define IS_SUPPORTED_URL(path) (!strncmp((path), "http://", sizeof("http://")-1) || !strncmp((path), "https://", sizeof("https://")-1))
+
 /* XXX: do parallel support for open AND open64 by #undef open etc .. */
 
 #define RESOLVE(x)	if (!o_##x && !(o_##x = dlsym(RTLD_NEXT, #x))) { fprintf(stderr, #x"() not found!\n"); exit(-1); }
@@ -403,7 +405,7 @@ off_t _intercept_seek(int fd, off_t offset, int whence)
 
 int open64(const char *pathname, int flag, ...)
 {
-    if (!strncmp(pathname, "http://", sizeof("http://")-1))
+    if (IS_SUPPORTED_URL(pathname))
     {
 	DEBUGF("pathname=%s, flag=%d\n", pathname, flag);
 
@@ -422,7 +424,7 @@ int open64(const char *pathname, int flag, ...)
 
 FILE *fopen64(const char *pathname, const char *mode)
 {
-    if (!strncmp(pathname, "http://", sizeof("http://")-1))
+    if (IS_SUPPORTED_URL(pathname))
     {
 	int fd;
 	FILE *ret = 0;
@@ -469,7 +471,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 
 int __xstat64(int version, const char *file_name, struct stat64 *buf)
 {
-    if (!strncmp(file_name, "http://", sizeof("http://")-1))
+    if (IS_SUPPORTED_URL(file_name))
     {
 	int fd;
 
@@ -504,7 +506,7 @@ int __fxstat64(int version, int fd, struct stat64 *buf)
 
 int __lxstat64(int version, const char *file_name, struct stat64 *buf)
 {
-    if (!strncmp(file_name, "http://", sizeof("http://")-1))
+    if (IS_SUPPORTED_URL(file_name))
     {
 	int fd;
 
