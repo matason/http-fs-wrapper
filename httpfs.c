@@ -70,6 +70,7 @@ static size_t (*o_fread)(void *, size_t, size_t, FILE *);
 static int (*o_fseeko64)(FILE *, __off64_t, int);
 static int (*o_fclose)(FILE *);
 static long int (*o_ftell)(FILE *);
+static __off64_t (*o_ftello64)(FILE *stream);
 
 static int (*o___xstat64)(int, const char *, struct stat64 *);
 static int (*o___fxstat64)(int, int, struct stat64 *);
@@ -222,7 +223,7 @@ int _intercept_open(const char *pathname)
     if (fd > HIGHEST_FD)
 	ERR_RETURN(EMFILE);
 
-    if (!(obj = malloc(sizeof(intercept_t))))
+    if (!(obj = calloc(1, sizeof(intercept_t))))
 	ERR_RETURN(ENOMEM);
 
     obj->url = strdup(pathname);
@@ -316,7 +317,7 @@ size_t _intercept_read(int fd, void *buf, size_t count)
     }
 
     /* someone set us up the bomb */
-    if (ra_size > count && (obj->ra_buf = malloc(ra_size)))
+    if (ra_size > count && (obj->ra_buf = calloc(1, ra_size)))
     {
 	obj->ra_size = ra_size;
 	obj->ra_offset = 0;
@@ -568,6 +569,21 @@ long int ftell(FILE *stream)
 
     RESOLVE(ftell);
     return o_ftell(stream);
+}
+
+__off64_t ftello64 (FILE *stream)
+{
+    int fd = fileno(stream);
+
+    if (intercept[fd])
+    {
+	DEBUGF("fd=%d\n", fd);
+
+	return intercept[fd]->offset;
+    }
+
+    RESOLVE(ftello64);
+    return o_ftello64(stream);
 }
 
 int close(int fd)
