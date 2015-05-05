@@ -1,5 +1,5 @@
 /*
- * gcc -Wall -nostartfiles -fpic -shared -o httpfs.so httpfs.c -ldl $(curl-config --libs)
+ * gcc -Wall -nostartfiles -fpic -shared -o httpfs.so httpfs.c func32.c -ldl $(curl-config --libs)
  */
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
@@ -21,6 +21,8 @@
 #include <errno.h>
 #include <curl/curl.h>
 #include <time.h>
+
+#include <stdarg.h>
 
 #define IS_SUPPORTED_URL(path) (!strncmp((path), "http://", sizeof("http://")-1) || !strncmp((path), "https://", sizeof("https://")-1))
 
@@ -62,7 +64,7 @@ static intercept_t *intercept[HIGHEST_FD];
 
 static int (*o_open64)(const char *, int, ...);
 static ssize_t (*o_read)(int, void *, size_t);
-static __off_t (*o_lseek64)(int, __off_t, int);
+static __off64_t (*o_lseek64)(int, __off64_t, int);
 static int (*o_close)(int);
 
 static FILE *(*o_fopen64)(const char *, const char *);
@@ -124,12 +126,12 @@ size_t _curl_parse_header(void *source, size_t size, size_t nmemb, void *userDat
     if (!strncasecmp(source, "Content-Length", sizeof("Content-Length")-1))
     {
 	obj->size = atoll(p);
-	DEBUGF("detected obj->size: %d\n", obj->size);
+	DEBUGF("detected obj->size: %zu\n", obj->size);
     }
     else if (!strncasecmp(source, "Accept-Ranges", sizeof("Accept-Ranges")-1) && !strncasecmp(p, "bytes", sizeof("bytes")-1))
     {
 	obj->flags |= FEAT_RANGE_SUPPORT;
-	DEBUGF("detected byte range support\n");
+	DEBUGF("detected byte range sup port\n");
     }
     else if (!strncasecmp(source, "Last-Modified", sizeof("Last-Modified")-1))
     {
@@ -212,7 +214,7 @@ int _intercept_open(const char *pathname)
     RESOLVE(open64);
     RESOLVE(close);
 
-#define ERR_RETURN(err)	do { if (fd >= 0) o_close(fd); errno = err; return -1; } while (0); 
+#define ERR_RETURN(err)	do { if (fd >= 0) o_close(fd); errno = err; return -1; } while (0);
 #define CURL_SETOPT(option, value) if ((ret = curl_easy_setopt(obj->curl, option, value)) != CURLE_OK) ERR_RETURN(EACCES);
 
     if ((fd = o_open64("/dev/null", O_RDONLY, 0644)) < 0)
@@ -250,7 +252,7 @@ int _intercept_open(const char *pathname)
 
     if (!obj->size || !(obj->flags & FEAT_RANGE_SUPPORT))
     {
-	DEBUGF("unacceptable resource: size=%d, flags=%d\n", obj->size, obj->flags);
+	DEBUGF("unacceptable resource: size=%zu, flags=%d\n", obj->size, obj->flags);
 	ERR_RETURN(ENXIO);
     }
 
@@ -406,6 +408,14 @@ off_t _intercept_seek(int fd, off_t offset, int whence)
 
 int open64(const char *pathname, int flag, ...)
 {
+    va_list ap;
+    va_start(ap, flag);
+    mode_t mode = 0;
+
+    if (flag & O_CREAT)
+        mode = va_arg(ap, mode_t);
+    va_end(ap);
+
     if (IS_SUPPORTED_URL(pathname))
     {
 	DEBUGF("pathname=%s, flag=%d\n", pathname, flag);
@@ -420,7 +430,7 @@ int open64(const char *pathname, int flag, ...)
     }
 
     RESOLVE(open64);
-    return o_open64(pathname, flag);
+    return o_open64(pathname, flag, mode);
 }
 
 FILE *fopen64(const char *pathname, const char *mode)
@@ -432,7 +442,7 @@ FILE *fopen64(const char *pathname, const char *mode)
 
 	DEBUGF("pathname=%s, mode=%s\n", pathname, mode);
 
-	if ((fd = _intercept_open(pathname)) < 0)
+	if ((fd = _intercept_open(pathname)) > 0)
 	     ret = fdopen(fd, mode);
 
 	return ret;
@@ -446,7 +456,7 @@ ssize_t read(int fd, void *buf, size_t count)
 {
     if (intercept[fd])
     {
-	DEBUGF("fd=%d, buf=%p, count=%d\n", fd, buf, count);
+	DEBUGF("fd=%d, buf=%p, count=%zu\n", fd, buf, count);
 
 	return _intercept_read(fd, buf, count);
     }
@@ -461,7 +471,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 
     if (intercept[fd])
     {
-	DEBUGF("ptr=%p, size=%d, nmemb=%d, fd=%d", ptr, size, nmemb, fd);
+	DEBUGF("ptr=%p, size=%zu, nmemb=%zu, fd=%d", ptr, size, nmemb, fd);
 
 	return _intercept_read(fd, ptr, size * nmemb);
     }
@@ -613,3 +623,4 @@ int fclose(FILE *stream)
     RESOLVE(fclose);
     return o_fclose(stream);
 }
+
