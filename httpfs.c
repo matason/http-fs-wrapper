@@ -443,7 +443,14 @@ FILE *fopen64(const char *pathname, const char *mode)
 	DEBUGF("pathname=%s, mode=%s\n", pathname, mode);
 
 	if ((fd = _intercept_open(pathname)) > 0)
-	     ret = fdopen(fd, mode);
+         mode = "r";
+         ret = fdopen(fd, mode);
+
+    size_t pos = ftell(ret);
+    fseek(ret, 0, SEEK_END);
+    size_t length = ftell(ret);
+    fseek(ret, pos, SEEK_SET);
+    printf("File is %zd long\n", length);
 
 	return ret;
     }
