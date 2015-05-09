@@ -53,7 +53,6 @@ typedef struct {
     off_t ra_offset;
     size_t ra_size;
     int flags;
-    int refcount;
 } intercept_t;
 
 #define READAHEAD_MAX 128*1024
@@ -74,7 +73,6 @@ static int (*o_fseeko64)(FILE *, __off64_t, int);
 static int (*o_fclose)(FILE *);
 static long int (*o_ftell)(FILE *);
 static __off64_t (*o_ftello64)(FILE *stream);
-static int (* o_dup2)(int oldfd, int newfd);
 
 static int (*o___xstat64)(int, const char *, struct stat64 *);
 static int (*o___fxstat64)(int, int, struct stat64 *);
@@ -230,7 +228,6 @@ int _intercept_open(const char *pathname)
     if (!(obj = calloc(1, sizeof(intercept_t))))
 	ERR_RETURN(ENOMEM);
 
-    obj->refcount = 1;
     obj->url = strdup(pathname);
 
     if (!(obj->curl = curl_easy_init()))
@@ -359,9 +356,6 @@ int _intercept_close(fd)
     if (!intercept[fd])
 	return -1;
 
-    if (--intercept[fd]->refcount)
-        return 0;
-
     DEBUGF("closing %d\n", fd);
 
     curl_easy_cleanup(intercept[fd]->curl);
@@ -410,14 +404,6 @@ off_t _intercept_seek(int fd, off_t offset, int whence)
     };
 
     return intercept[fd]->offset;
-}
-
-int _intercept_dup2(int oldfd, int newfd)
-{
-    close(newfd);
-    intercept[newfd] = intercept[oldfd];
-    intercept[newfd]->refcount++;
-    return newfd;
 }
 
 int open64(const char *pathname, int flag, ...)
@@ -638,12 +624,3 @@ int fclose(FILE *stream)
     return o_fclose(stream);
 }
 
-int dup2(int oldfd, int newfd) {
-
-    if (intercept[oldfd]) {
-        return _intercept_dup2(oldfd, newfd);
-    }
-
-    RESOLVE(dup2)
-    return o_dup2(oldfd, newfd);
-}
