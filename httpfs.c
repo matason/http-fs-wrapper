@@ -436,7 +436,7 @@ ssize_t _intercept_getdelim(int fd, char **lineptr, size_t *n, int delim)
         {
             if ((newbuf = realloc(*lineptr, *n  << 1)))
             {
-                *n = *n << 1;
+                *n <<= 1;
                 *lineptr = newbuf;
             }
             else
