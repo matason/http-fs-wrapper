@@ -74,7 +74,8 @@ static int (*o_fseeko64)(FILE *, __off64_t, int);
 static int (*o_fclose)(FILE *);
 static long int (*o_ftell)(FILE *);
 static __off64_t (*o_ftello64)(FILE *stream);
-static int (* o_dup2)(int oldfd, int newfd);
+static int (* o_dup2)(int, int);
+static ssize_t (* o___getdelim)(char **, size_t *, int, FILE *);
 
 static int (*o___xstat64)(int, const char *, struct stat64 *);
 static int (*o___fxstat64)(int, int, struct stat64 *);
@@ -420,6 +421,29 @@ int _intercept_dup2(int oldfd, int newfd)
     return newfd;
 }
 
+ssize_t _intercept_getdelim(int fd, char **lineptr, size_t *n, int delim)
+{
+    intercept_t *obj = intercept[fd];
+    char *c;
+    int counter;
+
+    if (!*lineptr)
+    {
+        *lineptr = (char *) malloc(*n + sizeof(size_t));
+    }
+    counter = -1;
+    while (obj->offset < obj->size)
+    {
+        c = lineptr[++counter];
+        _intercept_read(fd, c, 1);
+        if (*c == delim)
+        {
+           break;
+        }
+    }
+    return counter;
+}
+
 int open64(const char *pathname, int flag, ...)
 {
     va_list ap;
@@ -647,3 +671,25 @@ int dup2(int oldfd, int newfd) {
     RESOLVE(dup2)
     return o_dup2(oldfd, newfd);
 }
+
+ssize_t getline(char **lineptr, size_t *n, FILE *stream)
+{
+    return getdelim(lineptr, n, '\n', stream);
+}
+
+ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream)
+{
+    return __getdelim(lineptr, n, delim, stream);
+}
+
+ssize_t __getdelim(char **lineptr, size_t *n, int delim, FILE *stream)
+{
+    int fd = fileno(stream);
+
+    if (intercept[fd]) {
+        return _intercept_getdelim(fd, lineptr, n, delim);
+    }
+    RESOLVE(__getdelim)
+    return o___getdelim(lineptr, n, delim, stream);
+}
+
