@@ -424,22 +424,32 @@ int _intercept_dup2(int oldfd, int newfd)
 ssize_t _intercept_getdelim(int fd, char **lineptr, size_t *n, int delim)
 {
     intercept_t *obj = intercept[fd];
+    size_t nc = sizeof(char);
+    int reserved = 1;
+    int counter = -1;
     char *c;
-    int counter;
 
-    if (!*lineptr)
-    {
-        *lineptr = (char *) malloc(*n + sizeof(size_t));
-    }
-    counter = -1;
+    *lineptr = malloc(1);
     while (obj->offset < obj->size)
     {
-        c = lineptr[++counter];
-        _intercept_read(fd, c, 1);
+        ++counter;
+        if (counter >= reserved)
+        {
+            reserved = reserved  * 2;
+            *lineptr = realloc(*lineptr, reserved);
+        }
+        c = *lineptr + counter;
+        _intercept_read(fd, c, nc);
         if (*c == delim)
         {
            break;
         }
+    }
+    *n = reserved;
+    if (counter > -1)
+    {
+        c = *lineptr + ++counter;
+        *c = '\0';
     }
     return counter;
 }
