@@ -76,6 +76,7 @@ static long int (*o_ftell)(FILE *);
 static __off64_t (*o_ftello64)(FILE *stream);
 static int (* o_dup2)(int, int);
 static ssize_t (* o___getdelim)(char **, size_t *, int, FILE *);
+static int (*o_fgetc)(FILE *);
 
 static int (*o___xstat64)(int, const char *, struct stat64 *);
 static int (*o___fxstat64)(int, int, struct stat64 *);
@@ -459,6 +460,18 @@ ssize_t _intercept_getdelim(int fd, char **lineptr, size_t *n, int delim)
     return counter;
 }
 
+int _intercept_fgetc(int fd)
+{
+	int cnt;
+	unsigned char c;
+
+	cnt = _intercept_read(fd, &c, 1);
+	if (cnt <= 0)
+		return EOF;
+
+	return c;
+}
+
 int open64(const char *pathname, int flag, ...)
 {
     va_list ap;
@@ -708,3 +721,15 @@ ssize_t __getdelim(char **lineptr, size_t *n, int delim, FILE *stream)
     return o___getdelim(lineptr, n, delim, stream);
 }
 
+int fgetc(FILE *f)
+{
+	int fd = fileno(f);
+
+	if (intercept[fd])
+	{
+		return _intercept_fgetc(fd);
+	}
+
+	RESOLVE(fgetc);
+	return o_fgetc(f);
+}
