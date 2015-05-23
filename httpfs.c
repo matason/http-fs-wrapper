@@ -447,7 +447,7 @@ ssize_t _intercept_getdelim(int fd, char **lineptr, size_t *n, int delim)
 
         }
         c = *lineptr + counter;
-        _intercept_read(fd, c, nc);
+        _intercept_read(fd, c, 1);
         if (*c == delim)
         {
            break;
